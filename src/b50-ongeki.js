@@ -3,7 +3,7 @@
 const V = new URL(import.meta.url).search;
 const { norm } = await import('./common.js' + V);
 const { loadJson, loadImg } = await import('./b50.js' + V);
-const { drawImage, fmtPs } = await import('./draw-ongeki.js' + V);
+const { drawImage, fmtPs, C } = await import('./draw-ongeki.js' + V);
 
 // 定数表：先读 SBGA TOOL 每天整理的那份（格式和 reiwa.f5.si 一样，定数和书签 / SBGA TOOL 统一），读不到时退回 reiwa.f5.si
 const DB_URL = ['https://131a562.github.io/sbga-tool/data/feed/ongeki_record.json', 'https://reiwa.f5.si/ongeki_record.json'];
@@ -76,27 +76,24 @@ export async function renderOngeki(game, snap, name, obs, onStatus = () => {}) {
     }
   }));
 
-  // 统计框：大字 = 该枠对总 Rating 的贡献（快照的 parts，合计 ÷ 50 截断）；小字 = 曲数・平均・合计
+  // 头部同 CHUNITHM：玩家名 + 大号 RATING，右边是三个枠对总 Rating 的贡献（快照的 parts，合计 ÷ 50 截断）；
+  // 曲数・平均・合计写在各区块的标题后面
   const parts = snap.parts || [0, 0, 0];
   const avg = (rows) => (rows.length ? sum(rows.map((s) => s.rating)) / rows.length : 0);
   const total = (rows) => sum(rows.map((s) => s.rating));
   const psTotal = sum(side.map((s) => s.ps_rating));
-  const stats = [
-    ['NEW10', `+${(parts[0] / 1000).toFixed(3)}`, `${news.length}曲 平均 ${avg(news).toFixed(3)} · 合计 ${total(news).toFixed(3)}`],
-    ['BEST50', `+${(parts[1] / 1000).toFixed(3)}`, `${best.length}曲 平均 ${avg(best).toFixed(3)} · 合计 ${total(best).toFixed(3)}`],
-    ['P-SCORE50', `+${(parts[2] / 1000).toFixed(3)}`, `${side.length}曲 · 合计 ${fmtPs(psTotal)}`],
-  ];
-  // 副标题：玩家名、快照时间、三个枠怎么加起来（面板没有当时读网页的游戏内 Rating）
-  const who = String(name || '').normalize('NFKC');
+  const part = (i) => `+${(parts[i] / 1000).toFixed(3)}`;
   const cv = drawImage({
-    title: `Rating ${game.fmtRating(snap.r)}`,
-    subtitle: `${who ? who + ' · ' : ''}${snap.t} 运行查分书签时的 B50 · 新曲枠 ${(parts[0] / 1000).toFixed(3)} + ベスト枠 ${(parts[1] / 1000).toFixed(3)} + P-SCORE枠 ${(parts[2] / 1000).toFixed(3)}`,
-    stats,
+    profile: {
+      kicker: 'O.N.G.E.K.I. Re:Fresh  ·  RATING', name: String(name || '').normalize('NFKC'), rating: game.fmtRating(snap.r),
+      stats: [['BEST50', part(1)], ['NEW10', part(0)], ['P-SCORE50', part(2), C.plat]],
+      note: `${snap.t} 运行查分书签时的 B50 · 新曲枠 + ベスト枠 + P-SCORE枠（各枠合计 ÷ 50 后截断）`,
+    },
     sections: [
-      { name: 'BEST50', note: `平均 ${avg(best).toFixed(3)} · 最低 ${best.length ? best[best.length - 1].rating.toFixed(3) : '—'}`, rows: best, label: (s, i) => 'B' + (i + 1) },
-      { name: 'NEW10', note: `${latestVersion ? latestVersion + ' · ' : ''}平均 ${avg(news).toFixed(3)}`, rows: news, label: (s, i) => 'N' + (i + 1) },
+      { name: 'BEST50', note: `${best.length}曲 · 平均 ${avg(best).toFixed(3)} · 合计 ${total(best).toFixed(3)} · 最低 ${best.length ? best[best.length - 1].rating.toFixed(3) : '—'}`, rows: best, label: (s, i) => 'B' + (i + 1) },
+      { name: 'NEW10', note: `${latestVersion ? latestVersion + ' · ' : ''}${news.length}曲 · 平均 ${avg(news).toFixed(3)} · 合计 ${total(news).toFixed(3)}`, rows: news, label: (s, i) => 'N' + (i + 1) },
     ],
-    side: { name: 'P-SCORE50', note: `合计 ${fmtPs(psTotal)} · 最低 ${side.length ? fmtPs(side[side.length - 1].ps_rating) : '—'}`, rows: side, label: (s, i) => 'P' + (i + 1) },
+    side: { name: 'P-SCORE50', note: `${side.length}曲 · 合计 ${fmtPs(psTotal)} · 最低 ${side.length ? fmtPs(side[side.length - 1].ps_rating) : '—'}`, rows: side, label: (s, i) => 'P' + (i + 1) },
     footer: `${snap.t} 运行查分书签时的数据  ·  SBGA DASHBOARD  ·  估算值（仅 EXP/MAS/LUN），与游戏内会有少许出入  ·  定数・曲绘：reiwa.f5.si（定数后带 "?" 为未确定）` +
       (dbError ? '  ·  ' + dbError : ''),
     jackets,

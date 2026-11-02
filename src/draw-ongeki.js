@@ -2,11 +2,11 @@
 // 书签运行时从 https://131a562.github.io/sbga-dashboard/src/draw-ongeki.js 加载（B50、查分图用 drawImage；历史走势图用这里的颜色和标签），
 // 面板的 b50-ongeki.js 用它画快照的 B50。改样式只改这里，上传面板后书签和面板一起生效。
 //   左边：大卡片（每行 5 张）；右边（可选）：P-SCORE50 的小卡片（每行 2 张），有右边栏时宽约 2240px
-//   顶部：「O.N.G.E.K.I. Re:Fresh」+ 大标题 + 副标题，右上角统计框
+//   顶部：「O.N.G.E.K.I. Re:Fresh」+ 大标题 + 副标题，右上角统计框（B50 图：玩家名 + 大号 RATING，同 CHUNITHM）
 // 卡片的数据：{ title, difficulty, remaster, level（等级，带 + 的画成 13⁺.8）, const, const_unknown, played（false = 未游玩）,
 //   technical_score, rank, lamp, full_bell, platinum_score, platinum_max, platinum_star, rating, ps_rating, frame（含 P27 时右上角标 P-SCORE枠的名次） }
 const V = new URL(import.meta.url).search;
-const { rrect, fit } = await import('./draw.js' + V);
+const { rrect, fit, profileHeader } = await import('./draw.js' + V);
 export { rrect, fit };
 
 export const IMG = { W: 1800, PAD: 28, COLS: 5, GAP: 10, CH: 124, HEAD: 168, SEC: 44, FOOT: 40 };
@@ -192,7 +192,9 @@ export function drawPCard(ctx, s, label, x, y, jacket) {
 // stats：[[标签, 数值, 说明]]（右上的统计框）；sections：[{ name, note, rows, label(s, i), mode }]；
 // side（可选）：右侧栏 { name, note, rows, label(s, i) }，用 P-SCORE50 小卡片排列；footer：页脚；
 // jackets：卡片数据 → 加载好的曲绘（没有时 NO IMAGE）。返回 canvas
-export function drawImage({ title, subtitle, stats, sections, side, footer, jackets }) {
+// profile（B50 图用）：{ kicker, name, rating, ratingLabel, stats: [[标签, 数值, 颜色]], note }，
+//   有它时头部改成 CHUNITHM 那样的玩家名 + 大号 Rating（draw.js 的 profileHeader），title / subtitle / stats 不用
+export function drawImage({ title, subtitle, stats, sections, side, footer, jackets, profile }) {
   const { PAD, COLS, GAP, CH, HEAD, SEC, FOOT, CW } = IMG;
   const mainRight = IMG.W - PAD; // 主区域（大卡片）的右边界
   const sideX = mainRight + SIDE.MARGIN;
@@ -208,11 +210,15 @@ export function drawImage({ title, subtitle, stats, sections, side, footer, jack
   ctx.textBaseline = 'alphabetic';
   // 头部：左边标题，右边统计（副标题写到统计框前面为止）
   const boxW = 200, boxGap = 10;
-  ctx.fillStyle = C.accent; ctx.font = f(800, 16); ctx.fillText('O.N.G.E.K.I. Re:Fresh', PAD, 42);
-  ctx.fillStyle = C.fg; ctx.font = f(800, 52); ctx.fillText(title, PAD, 100);
-  ctx.font = f(500, 15); ctx.fillStyle = C.muted;
-  ctx.fillText(fit(ctx, subtitle, W - PAD * 2 - stats.length * (boxW + boxGap) - 20), PAD, 132);
-  stats.forEach(([label, value, note], i) => {
+  if (profile) {
+    profileHeader(ctx, { W, PAD, f, C: { kicker: C.accent, fg: C.fg, muted: C.muted, rating: C.accent }, kicker: 'O.N.G.E.K.I. Re:Fresh', ...profile });
+  } else {
+    ctx.fillStyle = C.accent; ctx.font = f(800, 16); ctx.fillText('O.N.G.E.K.I. Re:Fresh', PAD, 42);
+    ctx.fillStyle = C.fg; ctx.font = f(800, 52); ctx.fillText(title, PAD, 100);
+    ctx.font = f(500, 15); ctx.fillStyle = C.muted;
+    ctx.fillText(fit(ctx, subtitle, W - PAD * 2 - stats.length * (boxW + boxGap) - 20), PAD, 132);
+  }
+  (profile ? [] : stats).forEach(([label, value, note], i) => {
     const bx = W - PAD - (stats.length - i) * (boxW + boxGap) + boxGap;
     rrect(ctx, bx, 26, boxW, 112, 10); ctx.fillStyle = C.card; ctx.fill();
     ctx.fillStyle = C.muted; ctx.font = f(700, 14); ctx.fillText(label, bx + 14, 52);

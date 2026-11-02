@@ -1,12 +1,12 @@
 // maimai DX 的图片样式：maimai-dx-score 书签和 SBGA DASHBOARD 共用这一份。
 // 书签运行时从 https://131a562.github.io/sbga-dashboard/src/draw-maimai.js 加载（B50、查分图用 drawImage；历史走势图用这里的颜色和标签），
 // 面板的 b50-maimai.js 用它画快照的 B50。改样式只改这里，上传面板后书签和面板一起生效。
-//   顶部：「maimai でらっくす <最新版本>  ·  玩家名」+ 大标题 + 副标题，右上统计框
+//   顶部：「maimai でらっくす <最新版本>  ·  玩家名」+ 大标题 + 副标题，右上统计框（B50 图：玩家名 + 大号 DX RATING，同 CHUNITHM）
 //   卡片（每行 5 张，宽 1800px）：曲绘、序号、DX/STD、难度·定数（13⁺.8）、版本、曲名、达成率 + 评级、FC/AP、FS/FDX、DX 星、DX 分、单曲 rating
 // 卡片的数据：{ title, difficulty, diffShort, kind, level, const, const_unknown, version, played（false = 未游玩）,
 //   achievement（%）, rank, fc, sync, dx_score, dx_max, dx_star, rating }
 const V = new URL(import.meta.url).search;
-const { rrect, fit } = await import('./draw.js' + V);
+const { rrect, fit, profileHeader } = await import('./draw.js' + V);
 export { rrect, fit };
 
 export const IMG = { W: 1800, PAD: 28, COLS: 5, GAP: 10, CH: 124, HEAD: 168, SEC: 44, FOOT: 40 };
@@ -140,7 +140,9 @@ export function drawCard(ctx, s, label, x, y, jacket) {
 
 // head：最上面一行（「maimai でらっくす <版本>  ·  玩家名」）；stats：[[标签, 数值, 说明]]（右上的统计框）；
 // sections：[{ name, note, rows, label(s, i) }]；footer：页脚；jackets：卡片数据 → 加载好的曲绘（没有时 NO IMAGE）。返回 canvas
-export function drawImage({ head, title, subtitle, stats, sections, footer, jackets }) {
+// profile（B50 图用）：{ kicker, name, rating, ratingLabel, stats: [[标签, 数值, 颜色]], note }，
+//   有它时头部改成 CHUNITHM 那样的玩家名 + 大号 Rating（draw.js 的 profileHeader），head / title / subtitle / stats 不用
+export function drawImage({ head, title, subtitle, stats, sections, footer, jackets, profile }) {
   const { W, PAD, COLS, GAP, CH, HEAD, SEC, FOOT, CW } = IMG;
   const rowsOf = (n) => Math.max(1, Math.ceil(n / COLS));
   const H = HEAD + sections.reduce((h, sec) => h + SEC + rowsOf(sec.rows.length) * (CH + GAP), 0) + FOOT;
@@ -151,11 +153,15 @@ export function drawImage({ head, title, subtitle, stats, sections, footer, jack
   ctx.textBaseline = 'alphabetic';
   // 头部：左边标题，右边统计（副标题写到统计框前面为止）
   const boxW = 220, boxGap = 10;
-  ctx.fillStyle = C.accent; ctx.font = f(800, 16); ctx.fillText(fit(ctx, head, 700), PAD, 42);
-  ctx.fillStyle = C.fg; ctx.font = f(800, 52); ctx.fillText(fit(ctx, title, 760), PAD, 100);
-  ctx.font = f(500, 15); ctx.fillStyle = C.muted;
-  ctx.fillText(fit(ctx, subtitle, W - PAD * 2 - stats.length * (boxW + boxGap) - 20), PAD, 132);
-  stats.forEach(([label, value, note], i) => {
+  if (profile) {
+    profileHeader(ctx, { W, PAD, f, C: { kicker: C.accent, fg: C.fg, muted: C.muted, rating: C.accent }, kicker: head, ...profile });
+  } else {
+    ctx.fillStyle = C.accent; ctx.font = f(800, 16); ctx.fillText(fit(ctx, head, 700), PAD, 42);
+    ctx.fillStyle = C.fg; ctx.font = f(800, 52); ctx.fillText(fit(ctx, title, 760), PAD, 100);
+    ctx.font = f(500, 15); ctx.fillStyle = C.muted;
+    ctx.fillText(fit(ctx, subtitle, W - PAD * 2 - stats.length * (boxW + boxGap) - 20), PAD, 132);
+  }
+  (profile ? [] : stats).forEach(([label, value, note], i) => {
     const bx = W - PAD - (stats.length - i) * (boxW + boxGap) + boxGap;
     rrect(ctx, bx, 26, boxW, 112, 10); ctx.fillStyle = C.card; ctx.fill();
     ctx.fillStyle = C.muted; ctx.font = f(700, 14); ctx.fillText(label, bx + 14, 52);

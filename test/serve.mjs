@@ -1,7 +1,7 @@
 // 本地预览：node test/serve.mjs → http://localhost:5180/?sync=http://localhost:5181&chunithm=TESTER&maimai=TESTER&ongeki=TESTER
 //   5180  面板的静态文件
 //   5181  真正的 otoge-sync/worker.js，GitHub 用内存模拟（chuni-b50/test/fake-github.js），预置 TESTER 的模拟记录
-//         （VIEWER_ORIGINS 设成 5180，测的是和线上一样的「只读」跨域访问）
+//         （VIEWER_ORIGINS 设成 5180 和 5190（SBGA TOOL 的本地预览 songs/scripts/serve.mjs），测的是和线上一样的「只读」跨域访问）
 import { createServer } from 'node:http';
 import { readFile } from 'node:fs/promises';
 import { extname, join, normalize } from 'node:path';
@@ -30,7 +30,7 @@ for (const game of ['chunithm', 'maimai', 'ongeki']) {
 }
 // chuni-b50 旧版本按全角保存的名字（测试 legacyAccount 的退回读取）
 fake.files.set('chunithm/ＺＥＮＫＡＫＵ.json', { content: b64(JSON.stringify(mock.chunithm())), sha: 'sha-zen' });
-const env = { GITHUB_REPO: REPO, GITHUB_TOKEN: TOKEN, VIEWER_ORIGINS: 'http://localhost:5180' };
+const env = { GITHUB_REPO: REPO, GITHUB_TOKEN: TOKEN, VIEWER_ORIGINS: 'http://localhost:5180,http://localhost:5190' };
 
 createServer(async (req, res) => {
   const chunks = [];

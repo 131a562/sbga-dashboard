@@ -3,7 +3,7 @@
 const V = new URL(import.meta.url).search;
 const { norm } = await import('./common.js' + V);
 const { loadJson, loadImg } = await import('./b50.js' + V);
-const { drawImage } = await import('./draw-maimai.js' + V);
+const { drawImage, C } = await import('./draw-maimai.js' + V);
 
 // 定数表：先读 SBGA TOOL 每天整理的那份（格式和 otoge-db 一样，定数和书签 / SBGA TOOL 统一），读不到时退回 otoge-db
 const DB_URL = ['https://131a562.github.io/sbga-tool/data/feed/maimai-music-ex.json', 'https://otoge-db.net/maimai/data/music-ex.json'];
@@ -99,20 +99,20 @@ export async function renderMaimai(game, snap, name, obs, onStatus = () => {}) {
   const diffR = snap.r - calc;
   const maxMin = (arr) => {
     const r = arr.map((s) => s.rating);
-    return r.length ? `最高 ${Math.max(...r)} · 最低 ${Math.min(...r)}` : '—';
+    return r.length ? ` · 最高 ${Math.max(...r)} · 最低 ${Math.min(...r)}` : '';
   };
+  // 头部同 CHUNITHM：玩家名 + 大号 DX RATING，右边是两个枠的合计；曲数、最高 / 最低写在各区块的标题后面
   // 旧曲（BEST35）在上，新曲（NEW15）在下；角标是所在枠的序号（B1〜B35 / N1〜N15）
   const cv = drawImage({
-    head: `maimai でらっくす ${versionName(latestVersion)}${name ? '  ·  ' + name : ''}`,
-    title: `DX Rating ${snap.r || calc}`,
-    subtitle: `游戏内 Rating（maimai DX NET）· 按定数计算 ${calc}${diffR === 0 ? '（一致）' : `（差 ${diffR > 0 ? '+' : ''}${diffR}）`} · ${snap.t} 运行查分书签时的 B50`,
-    stats: [
-      ['BEST35', `${parts[1]}`, `${old35.length}曲 · ${maxMin(old35)}`],
-      ['NEW15', `${parts[0]}`, `${new15.length}曲 · ${maxMin(new15)}`],
-    ],
+    head: `maimai でらっくす ${versionName(latestVersion)}  ·  DX RATING  BEST 50`,
+    profile: {
+      name: String(name || ''), rating: `${snap.r || calc}`, ratingLabel: 'DX RATING',
+      stats: [['BEST35', `${parts[1]}`], ['NEW15', `${parts[0]}`, C.plat]],
+      note: `游戏内 Rating（maimai DX NET）· 按定数计算 ${calc}${diffR === 0 ? '（一致）' : `（差 ${diffR > 0 ? '+' : ''}${diffR}）`} · ${snap.t} 运行查分书签时的 B50`,
+    },
     sections: [
-      { name: 'BEST35', note: `合计 ${parts[1]}`, rows: old35, label: (s, i) => 'B' + (i + 1) },
-      { name: 'NEW15', note: `${newVersions.map(versionName).join(' / ')} · 合计 ${parts[0]}`, rows: new15, label: (s, i) => 'N' + (i + 1) },
+      { name: 'BEST35', note: `${old35.length}曲 · 合计 ${parts[1]}${maxMin(old35)}`, rows: old35, label: (s, i) => 'B' + (i + 1) },
+      { name: 'NEW15', note: `${newVersions.map(versionName).join(' / ')} · ${new15.length}曲 · 合计 ${parts[0]}${maxMin(new15)}`, rows: new15, label: (s, i) => 'N' + (i + 1) },
     ],
     footer: `${snap.t} 运行查分书签时的数据  ·  SBGA DASHBOARD  ·  成绩：maimai DX NET  ·  定数・曲绘：otoge-db（定数为 ".?" 的还未公开）  ·  AP/AP+ 单曲 rating +1` +
       (dbError ? '  ·  ' + dbError : ''),

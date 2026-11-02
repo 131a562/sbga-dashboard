@@ -2,7 +2,7 @@
 // 书签运行时从 https://131a562.github.io/sbga-dashboard/src/draw-chunithm.js 加载（B50、定数筛选、历史走势的图都用这里的底色、标题和卡片），
 // 面板的 b50-chunithm.js 用它画快照的 B50。改样式只改这里，上传面板后书签和面板一起生效。
 //   深蓝紫渐变背景 + 细斜线；左上「CHUNITHM  RATING  BEST 50」+ 玩家名；右上 RATING（金色大字）、NEW 20 AVG、BEST 30 AVG
-//   卡片：半透明底 + 难度颜色描边，曲绘、序号 #1、曲名、难度·定数徽章、评级、AJ/FC、分数、单曲 Rating；宽 1592px
+//   卡片：半透明底 + 难度颜色描边，曲绘、序号 #1、曲名、难度·定数徽章（14⁺.7）、评级、AJ/FC、分数、单曲 Rating；宽 1592px
 // 卡片的数据：{ title, diff（0〜4）, constant, estimated（定数未公开、按等级估算）, score, lamp, rating, img（加载好的曲绘或 null） }
 const V = new URL(import.meta.url).search;
 const { rrect, fit } = await import('./draw.js' + V);
@@ -89,14 +89,24 @@ export function card(g, s, label, x, y) {
   g.fillStyle = '#fff'; g.font = 'bold 16px ' + FONT;
   g.fillText(fit(g, s.title, tw), tx, y + 28);
 
-  // 难度 + 定数徽章
-  const badge = d.short + ' ' + (s.constant ? s.constant.toFixed(1) : '?') + (s.estimated ? '*' : '');
+  // 难度 + 定数徽章（同 maimai / 音击）：14+（14.5〜14.9）写成「14⁺.7」，加号小一号、画在整数部分右上角；
+  // 定数未公开（按等级估算）的写「14⁺.?」
+  const c = s.constant || 0, ci = Math.floor(c + 1e-9);
+  const head = d.short + ' ' + (c ? ci : '?');
+  const plus = c > 0 && c - ci >= 0.5 - 1e-9;
+  const tail = !c ? '' : s.estimated ? '.?' : '.' + Math.round((c - ci) * 10);
   g.font = 'bold 13px ' + FONT;
-  const bw = g.measureText(badge).width + 14;
+  const wHead = g.measureText(head).width, wTail = g.measureText(tail).width;
+  g.font = 'bold 10px ' + FONT;
+  const wPlus = plus ? g.measureText('+').width + 1 : 0;
+  const bw = wHead + wPlus + wTail + 14;
   rrect(g, tx, y + 38, bw, 20, 4);
   g.fillStyle = d.color; g.fill();
   if (d.key === 'ult') { g.strokeStyle = '#e33'; g.lineWidth = 1.5; g.stroke(); }
-  g.fillStyle = '#fff'; g.fillText(badge, tx + 7, y + 53);
+  g.fillStyle = '#fff';
+  g.font = 'bold 13px ' + FONT; g.fillText(head, tx + 7, y + 53);
+  if (plus) { g.font = 'bold 10px ' + FONT; g.fillText('+', tx + 7 + wHead, y + 47); }
+  g.font = 'bold 13px ' + FONT; g.fillText(tail, tx + 7 + wHead + wPlus, y + 53);
   const rk = scoreRank(s.score);
   g.fillStyle = rk.startsWith('SSS') ? '#ffd65a' : rk.startsWith('SS') ? '#ffe9a8' : '#ddd';
   g.font = 'bold 15px ' + FONT;

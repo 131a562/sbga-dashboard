@@ -45,7 +45,7 @@ export async function renderChunithm(game, snap, name, onStatus = () => {}) {
   // 玩家名：书签用 CHUNITHM-NET 上的原样（全角）；页脚：书签写生成日期，这里写快照的时间（可能是以前的快照）
   const cv = drawB50({
     name, rating: snap.r ? Number(snap.r).toFixed(2) : '', best, news,
-    footer: snap.t + ' 运行查分书签时的 B50  ·  SBGA DASHBOARD  ·  data: CHUNITHM-NET / otoge-db  ·  * = 定数未公開（推定）' + dbError,
+    footer: snap.t + ' 运行查分书签时的 B50  ·  SBGA DASHBOARD  ·  data: CHUNITHM-NET / otoge-db  ·  定数为 ".?" 的还未公开（按等级估算）' + dbError,
   });
 
   onStatus('正在生成图片…');

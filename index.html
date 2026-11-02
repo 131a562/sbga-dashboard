@@ -88,8 +88,13 @@
   .badge { font-size: 11px; font-weight: 700; color: #fff; border-radius: 4px; padding: 1px 5px; white-space: nowrap; }
   .title { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
   .gain { font-weight: 700; color: var(--good); white-space: nowrap; }
-  .fromto { grid-column: 2 / 4; font-size: 12px; color: var(--muted); }
-  .sub-h { font-size: 13px; color: var(--muted); margin: 12px 0 2px; }
+  /* 推分列表：一首两行。第一行难度、曲名、账号 Rating 的变化（绿色；没跨过一档 / 没进枠的灰色），第二行成绩和所在的枠 */
+  ul.list.push .imp { font-weight: 700; color: var(--good); white-space: nowrap; }
+  ul.list.push .imp.off { font-weight: 400; color: var(--muted); }
+  ul.list.push .l2 { grid-column: 1 / -1; display: flex; align-items: baseline; gap: 6px; min-width: 0; font-size: 12px; color: var(--muted); }
+  ul.list.push .l2 b { font-size: 13px; color: var(--ink); }
+  ul.list.push .where { margin-left: auto; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .nw { font-size: 10px; border: 1px solid var(--line); border-radius: 4px; padding: 0 4px; }
   details summary { cursor: pointer; color: var(--accent); font-size: 13px; margin-top: 6px; }
 
   /* 里程碑 */
@@ -245,6 +250,6 @@
   </div>
 </div>
 <!-- 版本号 v：每次上传新版本时加 1，手机就会下载新脚本，不会继续用缓存里的旧版（见 README「部署」） -->
-<script type="module" src="src/app.js?v=14"></script>
+<script type="module" src="src/app.js?v=15"></script>
 </body>
 </html>

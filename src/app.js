@@ -80,7 +80,7 @@ async function loadOne(game, input) {
     const legacy = legacyAccount(input);
     if (r.missing && game.id === 'chunithm' && legacy && legacy !== name) r = await fetchHist(SYNC_URL, game.id, legacy);
     if (r.missing) return { game, name, status: 'missing' };
-    return { game, name, status: 'ok', a: analyze(game, r.hist) };
+    return { game, name, status: 'ok', a: analyze(game, r.hist), hist: r.hist };
   } catch (e) {
     return { game, name, status: 'error', error: e.message };
   }
@@ -93,8 +93,17 @@ async function load(names) {
   if (!list.length) return;
   results = list.map((game) => ({ game, name: cleanAccount(names[game.id]), status: 'loading' }));
   render();
-  await Promise.all(list.map(async (game, i) => { results[i] = await loadOne(game, names[game.id]); render(); }));
+  await Promise.all(list.map(async (game, i) => {
+    const r = results[i] = await loadOne(game, names[game.id]);
+    render();
+    if (r.status === 'ok') loadImpact(r);
+  }));
   chartFromUrl();
+}
+// 推分区块里每首歌让账号 Rating 变了多少（src/impact.js）：要下载定数表，先显示列表，算好了再补上
+async function loadImpact(r) {
+  try { r.impact = await (await import('./impact.js' + V)).accountImpact(r.game, r.hist); } catch (e) { r.impact = { error: e.message }; }
+  if (results.includes(r)) renderPushes();
 }
 
 // ---- 显示 ----
@@ -127,9 +136,11 @@ function ratingDelta(a) {
   const after = s.filter((p) => p.ms <= P.end).pop();
   return after ? after.r - before.r : null;
 }
+// Rating 显示到小数点后几位（游戏里的显示）
+const DIGITS = { chunithm: 2, maimai: 0, ongeki: 3 };
 const fmtDelta = (game, d) => {
   if (d == null) return '';
-  const digits = { chunithm: 2, maimai: 0, ongeki: 3 }[game.id];
+  const digits = DIGITS[game.id];
   const v = Math.round(d * 10 ** digits) / 10 ** digits;
   return `<span class="delta ${v > 0 ? 'up' : 'flat'}">${v > 0 ? '+' : v < 0 ? '−' : '±'}${Math.abs(v).toFixed(digits)}</span>`;
 };
@@ -315,27 +326,52 @@ function calendarHtml(ok) {
     `<div class="cal-note small muted" id="cal-note">点一格看那天打了什么</div><div class="cal-legend small">${legend}</div>`;
 }
 
+// 一首歌在这段时间里的推分（impact.js 的结果）合起来：账号 Rating 的变化和说明
+function impactOf(r, list) {
+  if (!r.impact) return { text: '…', note: '正在推算账号 Rating' };
+  if (r.impact.error) return { text: '—', note: '推算失败' };
+  if (!list || !list.length) return { text: '—', note: '' };
+  const d = list.reduce((a, x) => a + x.d, 0);
+  const last = (k) => [...list].reverse().find((x) => x[k] != null);
+  const m = last('inFrame'), p = last('pIn');
+  const fmt = (v) => (v / 10 ** DIGITS[r.game.id]).toFixed(DIGITS[r.game.id]);
+  const bits = [];
+  const entered = list.some((x) => x.entered);
+  if (m) bits.push(!m.inFrame ? '未进入 ' + m.frame : (entered ? '进入 ' + m.frame : m.frame + ' 内提升') + ' · ' + m.single.toFixed(DIGITS[r.game.id]));
+  if (p) bits.push(!p.pIn ? '未进入 P-SCORE50' : list.some((x) => x.pEntered) ? '进入 P-SCORE50' : 'P-SCORE50 内提升');
+  if (!bits.length) bits.push(list.every((x) => x.noSnap) ? '之前没有快照' : list.some((x) => x.bonus) ? 'ボーナストラック' : '定数未知');
+  const counted = (m && m.inFrame) || (p && p.pIn);
+  return { d: counted ? d : -1, text: counted ? '+' + fmt(d) : '—', good: d > 0, note: bits.join(' · ') };
+}
+
+// 这段时间里有新成绩（推分或新打）的谱面，一首两行：难度、曲名、账号 Rating 的变化 / 现在的成绩、提高了多少（或 NEW）、所在的枠和单曲 Rating。
+// 账号 Rating 的变化按游玩记录的时间顺序推算（src/impact.js），所以中二截断到 0.01、音击到 0.001：没跨过一档的推分是 +0
 function pushHtml(r) {
   const { game } = r;
   const a = r.a;
   const P = period();
-  const imp = a.improved(P.start, P.end);
-  const pushed = imp.filter((x) => !x.first);
-  const fresh = imp.filter((x) => x.first);
-  // 各谱面提高的分数加起来没有意义，标题行只写这段时间账号 Rating 的变化（和卡片上的相同）
+  const byKey = new Map();
+  (Array.isArray(r.impact) ? r.impact : []).forEach((x) => {
+    if (!inPeriod(x.ms, P)) return;
+    if (!byKey.has(x.key)) byKey.set(x.key, []);
+    byKey.get(x.key).push(x);
+  });
+  // 让账号 Rating 涨得多的在前；没进枠的放在后面，按提高的分数排
+  const rows = a.improved(P.start, P.end).map((x) => ({ x, im: impactOf(r, byKey.get(x.key)) }))
+    .sort((p, q) => (q.im.d ?? -1) - (p.im.d ?? -1) || q.x.gain - p.x.gain || q.x.at - p.x.at);
   const delta = ratingDelta(a);
   // 点一行打开这个谱面的记录（见下面的「谱面记录」）
-  const li = (x) => `<li class="go" data-game="${game.id}" data-key="${esc(x.key)}"><span class="badge" style="background:${x.diffColor}">${esc(x.diff)}</span>` +
+  const li = ({ x, im }) => `<li class="go" data-game="${game.id}" data-key="${esc(x.key)}"><span class="badge" style="background:${x.diffColor}">${esc(x.diff)}</span>` +
     `<a class="title" href="${esc(chartHref(game, a.chartByKey(x.key).ref))}" title="${esc(x.title)}">${esc(x.title)}</a>` +
-    (x.first ? `<span class="num">${esc(game.fmtScore(x.to))}</span>`
-      : `<span class="gain num">${esc(game.fmtGain(x.gain))}</span><span class="fromto num">${esc(game.fmtScore(x.from))} → ${esc(game.fmtScore(x.to))}</span>`) +
-    `</li>`;
-  const listOf = (arr, n) => `<ul class="list">${arr.slice(0, n).map(li).join('')}</ul>` +
-    (arr.length > n ? `<details><summary>其余 ${arr.length - n} 首</summary><ul class="list">${arr.slice(n).map(li).join('')}</ul></details>` : '');
+    `<span class="imp num${im.good ? '' : ' off'}">${esc(im.text)}</span>` +
+    `<div class="l2"><b class="num">${esc(game.fmtScore(x.to))}</b>` +
+    (x.first ? '<span class="nw">NEW</span>' : `<span class="num">${esc(game.fmtGain(x.gain))}</span>`) +
+    `<span class="where">${esc(im.note)}</span></div></li>`;
+  const listOf = (arr, n) => `<ul class="list push">${arr.slice(0, n).map(li).join('')}</ul>` +
+    (arr.length > n ? `<details><summary>其余 ${arr.length - n} 首</summary><ul class="list push">${arr.slice(n).map(li).join('')}</ul></details>` : '');
   return `<div class="push-head"><b style="color:${game.color}">${esc(game.label)}</b>` +
-    `<span class="small num">${pushed.length} 个谱面推分${delta != null ? ' · 账号 Rating ' + fmtDelta(game, delta) : ''}</span></div>` +
-    (pushed.length ? listOf(pushed, 15) : `<div class="empty">${P.inText}没有推分</div>`) +
-    (fresh.length ? `<div class="sub-h">新打的谱面 ${fresh.length} 首</div>` + listOf(fresh, 5) : '');
+    `<span class="small num">${rows.length} 首有新成绩${delta != null ? ' · Rating ' + fmtDelta(game, delta) : ''}</span></div>` +
+    (rows.length ? listOf(rows, 15) : `<div class="empty">${P.inText}没有新成绩</div>`);
 }
 
 function render() {
@@ -347,6 +383,10 @@ function render() {
     ? ok.map((r) => `<div class="trend"><div class="head"><b style="color:${r.game.color}">${esc(r.game.label)}</b>` +
       `<span class="muted num">${r.a.rating ? esc(r.a.rating.text) : ''}</span></div>${trendSvg(r.game, r.a)}</div>`).join('')
     : '<div class="small muted">没有可显示的记录</div>';
+  renderPushes();
+}
+function renderPushes() {
+  const ok = results.filter((r) => r.status === 'ok' && r.a.since);
   $('#pushes').innerHTML = ok.map((r) => `<div class="panel">${pushHtml(r)}</div>`).join('');
 }
 

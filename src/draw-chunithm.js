@@ -65,6 +65,30 @@ export function sectionTitle(g, label, y, color) {
   g.fillText(label, PAD + 16, y + 36);
 }
 
+// 难度 + 定数徽章，画在基线 y 处，返回宽度。卡片和书签的历史图共用。
+// c：定数（0 = 未知，写「?」；省略 = 只写难度）；est：定数未公开、按等级估算。
+// 写法同 maimai / 音击：14+（14.5〜14.9）写成「14⁺.7」，加号小一号、画在整数部分右上角；估算的写「14⁺.?」
+export function diffBadge(g, diff, x, y, c, est) {
+  const d = DIFFS[diff] || DIFFS[3];
+  const ci = Math.floor((c || 0) + 1e-9);
+  const head = d.short + (c == null ? '' : ' ' + (c ? ci : '?'));
+  const plus = c > 0 && c - ci >= 0.5 - 1e-9;
+  const tail = !c ? '' : est ? '.?' : '.' + Math.round((c - ci) * 10);
+  g.font = 'bold 13px ' + FONT;
+  const wHead = g.measureText(head).width, wTail = g.measureText(tail).width;
+  g.font = 'bold 10px ' + FONT;
+  const wPlus = plus ? g.measureText('+').width + 1 : 0;
+  const bw = wHead + wPlus + wTail + 14;
+  rrect(g, x, y - 15, bw, 20, 4);
+  g.fillStyle = d.color; g.fill();
+  if (d.key === 'ult') { g.strokeStyle = '#e33'; g.lineWidth = 1.5; g.stroke(); }
+  g.fillStyle = '#fff';
+  g.font = 'bold 13px ' + FONT; g.fillText(head, x + 7, y);
+  if (plus) { g.font = 'bold 10px ' + FONT; g.fillText('+', x + 7 + wHead, y - 6); }
+  g.font = 'bold 13px ' + FONT; g.fillText(tail, x + 7 + wHead + wPlus, y);
+  return bw;
+}
+
 export function card(g, s, label, x, y) {
   const w = CW, h = CH;
   const d = DIFFS[s.diff] || DIFFS[3];
@@ -89,24 +113,7 @@ export function card(g, s, label, x, y) {
   g.fillStyle = '#fff'; g.font = 'bold 16px ' + FONT;
   g.fillText(fit(g, s.title, tw), tx, y + 28);
 
-  // 难度 + 定数徽章（同 maimai / 音击）：14+（14.5〜14.9）写成「14⁺.7」，加号小一号、画在整数部分右上角；
-  // 定数未公开（按等级估算）的写「14⁺.?」
-  const c = s.constant || 0, ci = Math.floor(c + 1e-9);
-  const head = d.short + ' ' + (c ? ci : '?');
-  const plus = c > 0 && c - ci >= 0.5 - 1e-9;
-  const tail = !c ? '' : s.estimated ? '.?' : '.' + Math.round((c - ci) * 10);
-  g.font = 'bold 13px ' + FONT;
-  const wHead = g.measureText(head).width, wTail = g.measureText(tail).width;
-  g.font = 'bold 10px ' + FONT;
-  const wPlus = plus ? g.measureText('+').width + 1 : 0;
-  const bw = wHead + wPlus + wTail + 14;
-  rrect(g, tx, y + 38, bw, 20, 4);
-  g.fillStyle = d.color; g.fill();
-  if (d.key === 'ult') { g.strokeStyle = '#e33'; g.lineWidth = 1.5; g.stroke(); }
-  g.fillStyle = '#fff';
-  g.font = 'bold 13px ' + FONT; g.fillText(head, tx + 7, y + 53);
-  if (plus) { g.font = 'bold 10px ' + FONT; g.fillText('+', tx + 7 + wHead, y + 47); }
-  g.font = 'bold 13px ' + FONT; g.fillText(tail, tx + 7 + wHead + wPlus, y + 53);
+  const bw = diffBadge(g, s.diff, tx, y + 53, s.constant || 0, s.estimated);
   const rk = scoreRank(s.score);
   g.fillStyle = rk.startsWith('SSS') ? '#ffd65a' : rk.startsWith('SS') ? '#ffe9a8' : '#ddd';
   g.font = 'bold 15px ' + FONT;

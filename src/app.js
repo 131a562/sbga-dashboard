@@ -100,10 +100,13 @@ async function load(names) {
   }));
   chartFromUrl();
 }
-// 推分区块里每首歌让账号 Rating 变了多少（src/impact.js）：要下载定数表，先显示列表，算好了再补上
+// 推分区块里每首歌让账号 Rating 变了多少（src/impact.js）：要下载定数表，先显示列表，算好了再补上。
+// 出勤记录里几次出勤共用一段快照时也用它（见 sessionDelta）
 async function loadImpact(r) {
   try { r.impact = await (await import('./impact.js' + V)).accountImpact(r.game, r.hist); } catch (e) { r.impact = { error: e.message }; }
-  if (results.includes(r)) renderPushes();
+  if (!results.includes(r)) return;
+  renderPushes();
+  renderSessions();
 }
 
 // ---- 显示 ----
@@ -244,18 +247,28 @@ function sessionsOf(ok) {
   out.forEach((x, i) => { x.nextStart = out[i + 1] ? out[i + 1].start : Infinity; });
   return out;
 }
-// 一次出勤前后的 Rating 变化：出勤前最后一个值 → 下一次出勤之前最后一个值（出勤后没运行书签时为 null）
-function sessionDelta(a, x) {
+// 一次出勤前后的 Rating 变化：出勤前最后一个值 → 下一次出勤之前最后一个值。
+// Rating 的值大多来自快照（运行书签时才有）。两次快照之间这个游戏有好几次出勤时（例：出勤三次才运行一次书签），
+// 快照的差是这几次合起来的，不能都算到最后一次上：这时改用 impact.js 按游玩时间推算的每次推分的变化，
+// 把这次出勤里的加起来（推算还没算好、或者推分在第一个快照之前时不显示）。all：全部出勤（sessionsOf）
+function sessionDelta(r, x, all) {
+  const a = r.a;
   const before = a.series.filter((p) => p.ms < x.start).pop();
   const after = a.series.filter((p) => p.ms < x.nextStart).pop();
-  return before && after && after.ms >= x.start ? after.r - before.r : null;
+  const next = a.series.find((p) => p.ms > x.end);
+  const shared = all.some((y) => y !== x && y.games.has(r) && y.start > (before ? before.ms : -Infinity) && y.end < (next ? next.ms : Infinity));
+  if (!shared) return before && after && after.ms >= x.start ? after.r - before.r : null;
+  if (!Array.isArray(r.impact)) return null;
+  const list = r.impact.filter((u) => u.ms >= x.start && u.ms <= x.end);
+  if (list.some((u) => u.noSnap)) return null;
+  return list.reduce((s, u) => s + u.d, 0) / 10 ** DIGITS[r.game.id];
 }
-function sessionHtml(x) {
+function sessionHtml(x, all) {
   const t = new Date(x.start);
   const games = [...x.games.entries()].sort((p, q) => GAMES.indexOf(p[0].game) - GAMES.indexOf(q[0].game)).map(([r, n]) => {
     const imp = r.a.improved(x.start, x.end);
     const pushed = imp.filter((i) => !i.first).length, fresh = imp.length - pushed;
-    const d = sessionDelta(r.a, x);
+    const d = sessionDelta(r, x, all);
     return `<span class="sg"><b style="color:${r.game.color}">${esc(r.game.label)}</b> ${n} 首` +
       (pushed ? ` · 推分 ${pushed}` : '') + (fresh ? ` · 新打 ${fresh}` : '') +
       (d != null ? ` · <span class="nw">Rating ${fmtDelta(r.game, d)}</span>` : '') + `</span>`;
@@ -265,13 +278,15 @@ function sessionHtml(x) {
 }
 function sessionsHtml(ok) {
   const P = period();
-  const list = sessionsOf(ok).filter((x) => x.end >= P.start && x.start <= P.end).reverse();
+  const all = sessionsOf(ok);
+  const list = all.filter((x) => x.end >= P.start && x.start <= P.end).reverse();
+  const li = (x) => sessionHtml(x, all);
   if (!list.length) return `<div class="push-head"><b>出勤记录</b></div><div class="empty">${P.inText}没有记录到游玩</div>`;
   const total = list.reduce((n, x) => n + [...x.games.values()].reduce((s, v) => s + v, 0), 0);
   const N = 10;
   return `<div class="push-head"><b>出勤记录</b><span class="small num">${list.length} 次 · 共 ${total} 首 · 平均每次 ${Math.round(total / list.length)} 首</span></div>` +
-    `<ul class="list sessions">${list.slice(0, N).map(sessionHtml).join('')}</ul>` +
-    (list.length > N ? `<details><summary>更早的 ${list.length - N} 次</summary><ul class="list sessions">${list.slice(N).map(sessionHtml).join('')}</ul></details>` : '');
+    `<ul class="list sessions">${list.slice(0, N).map(li).join('')}</ul>` +
+    (list.length > N ? `<details><summary>更早的 ${list.length - N} 次</summary><ul class="list sessions">${list.slice(N).map(li).join('')}</ul></details>` : '');
 }
 
 // 出勤日历：最近 26 周（手机 15 周，圆点太小点不中），每天一个圆点。颜色 = 那天打的游戏（几个游戏时从圆心按首数比例分扇形），深浅 = 一共打了几首（分段见下面的 level）
@@ -378,12 +393,16 @@ function render() {
   $('#cards').innerHTML = results.map((r) => `<div class="panel card" style="--c:${r.game.color}">${cardHtml(r)}</div>`).join('');
   const ok = results.filter((r) => r.status === 'ok' && r.a.since);
   $('#calendar').innerHTML = ok.length ? calendarHtml(ok) : '<div class="small muted">没有可显示的记录</div>';
-  $('#sessions').innerHTML = ok.length ? sessionsHtml(ok) : '<div class="small muted">没有可显示的记录</div>';
+  renderSessions();
   $('#trends').innerHTML = ok.length
     ? ok.map((r) => `<div class="trend"><div class="head"><b style="color:${r.game.color}">${esc(r.game.label)}</b>` +
       `<span class="muted num">${r.a.rating ? esc(r.a.rating.text) : ''}</span></div>${trendSvg(r.game, r.a)}</div>`).join('')
     : '<div class="small muted">没有可显示的记录</div>';
   renderPushes();
+}
+function renderSessions() {
+  const ok = results.filter((r) => r.status === 'ok' && r.a.since);
+  $('#sessions').innerHTML = ok.length ? sessionsHtml(ok) : '<div class="small muted">没有可显示的记录</div>';
 }
 function renderPushes() {
   const ok = results.filter((r) => r.status === 'ok' && r.a.since);

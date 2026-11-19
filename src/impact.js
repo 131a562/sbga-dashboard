@@ -260,7 +260,10 @@ export async function accountImpact(game, raw) {
   // 按时间重放：每次推分（会改变单曲 Rating 的提升）。判定和面板的推分列表相同：
   // 第一次出现时是新打的（或游戏标了 NEW RECORD）才算；以前打过的谱面，成绩扫描读到过之后的提升才算
   const isNewObs = game.isNewChart ? game.isNewChart(hist) : (o) => !!since && o.t > since;
+  // 成绩扫描才发现的变化（标记、FB、☆、AP 等，分数没变）：归到上一次扫描之后这首歌最近的那次游玩（同书签），
+  // 出勤记录才能算到那次出勤上。分数的提升不知道是哪一次打的（プレイ履歴里没有那次游玩），仍按运行书签的时间
   const state = new Map(), scanned = new Set(), fresh = new Set(), updates = [];
+  const bestScore = new Map(), lastPlay = new Map(), lastScan = new Map();
   obs.forEach((o) => {
     const { key, kind, unsure } = keyOf(o);
     if (unsure) return; // 分不出版本的游玩
@@ -271,11 +274,16 @@ export async function accountImpact(game, raw) {
     if (o.src === 'b') scanned.add(key);
     const { next, main, ps } = R.absorb(before || R.blank(), o);
     state.set(key, next);
+    const scoreUp = game.score(o) > (bestScore.get(key) ?? -Infinity);
+    if (scoreUp) bestScore.set(key, game.score(o));
+    const t = o.src === 'b' && !scoreUp && lastPlay.get(key) > (lastScan.get(key) || '') ? lastPlay.get(key) : o.t;
+    if (o.src === 'p') lastPlay.set(key, o.t); else lastScan.set(key, o.t);
     const nr = o.src === 'p' && !!o.nr;
     if (!before) {
-      if (fresh.has(key) || nr) updates.push({ key, t: o.t, after: next, main: true, ps: (next.st || 0) > 0 });
-    } else if ((main || ps) && (known || nr)) updates.push({ key, t: o.t, after: next, main, ps });
+      if (fresh.has(key) || nr) updates.push({ key, t, after: next, main: true, ps: (next.st || 0) > 0 });
+    } else if ((main || ps) && (known || nr)) updates.push({ key, t, after: next, main, ps });
   });
+  updates.sort(byTime);
 
   const out = [];
   const disp = R.calibrate(snaps, fromSnap);

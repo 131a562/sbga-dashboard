@@ -87,7 +87,7 @@ export async function renderOngeki(game, snap, name, obs, onStatus = () => {}) {
     profile: {
       kicker: 'O.N.G.E.K.I. Re:Fresh  ·  RATING', name: String(name || '').normalize('NFKC'), rating: game.fmtRating(snap.r),
       stats: [['BEST50', part(1)], ['NEW10', part(0)], ['P-SCORE50', part(2), C.plat]],
-      note: `${snap.t} 运行查分书签时的 B50 · 新曲枠 + ベスト枠 + P-SCORE枠（各枠合计 ÷ 50 后截断）`,
+      note: `${snap.t} 运行查分书签时的 B50 · 新曲枠 + ベスト枠 + P-SCORE枠（各枠各自截断到 0.001）`,
     },
     sections: [
       { name: 'BEST50', note: `${best.length}曲 · 平均 ${avg(best).toFixed(3)} · 合计 ${total(best).toFixed(3)} · 最低 ${best.length ? best[best.length - 1].rating.toFixed(3) : '—'}`, rows: best, label: (s, i) => 'B' + (i + 1) },

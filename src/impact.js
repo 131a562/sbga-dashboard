@@ -202,9 +202,11 @@ const ongeki = {
     return { next, main, ps };
   },
   value: (frame, inf, st) => (frame === 'ps' ? ongekiPs(inf, st) : ongekiTs(inf, st)),
-  // 账号 Rating = 三个枠各自 ÷ 50 截断到 0.001 后相加；起点对齐前一个快照的游戏 Rating
+  // 账号 Rating = 三个枠各自截断到 0.001 后相加；起点对齐前一个快照的游戏 Rating
   calibrate: (snaps, fromSnap) => {
-    const parts = (st) => ['news', 'best', 'ps'].reduce((a, f) => a + Math.floor(sumOf(st[f]) / 5000), 0);
+    // 新曲枠：每首 ÷5 截断到 0.001，加起来 ÷10 再截断（同书签的 newPart）；ベスト枠 / P-SCORE枠：合计 ÷50 截断
+    const newPart = (m) => Math.floor([...(m ? m.values() : [])].reduce((a, v) => a + Math.floor(v / 500), 0) / 10);
+    const parts = (st) => newPart(st.news) + ['best', 'ps'].reduce((a, f) => a + Math.floor(sumOf(st[f]) / 5000), 0);
     return (idx) => {
       const off = snaps[idx].r ? Math.round(snaps[idx].r * 1000) - parts(fromSnap(snaps[idx])) : 0;
       return (st) => parts(st) + off;
